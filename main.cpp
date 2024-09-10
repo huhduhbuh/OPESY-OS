@@ -3,9 +3,6 @@
 #include <cstring>
 using namespace std;
 
-// command line compiling : 
-// g++ -Wall [name].cpp -o [name].exe
-
 void clearScreen() {
     #ifdef _WIN32
         system("cls");  // Windows
@@ -21,7 +18,8 @@ void setColor(int colorCode) {
 
 // for reprinting the header after clearing the screen
 void printHeader() {
-        cout << R"(  ____ ____   ___  ____  _____ ______   __
+    clearScreen();
+    cout << R"(  ____ ____   ___  ____  _____ ______   __
  / ___/ ___| / _ \|  _ \| ____/ ___\ \ / /
 | |   \___ \| | | | |_) |  _| \___ \\ V / 
 | |___ ___) | |_| |  __/| |___ ___) || |  
@@ -36,19 +34,7 @@ void printHeader() {
 }
 
 int main() {
-    clearScreen();
-    cout << R"(  ____ ____   ___  ____  _____ ______   __
- / ___/ ___| / _ \|  _ \| ____/ ___\ \ / /
-| |   \___ \| | | | |_) |  _| \___ \\ V / 
-| |___ ___) | |_| |  __/| |___ ___) || |  
- \____|____/ \___/|_|   |_____|____/ |_|)";
-
-    setColor(32);
-    cout << "\nHello, Welcome to CSOPESY commandline!\n";
-    setColor(33);
-    cout << "Type 'exit' to quit, 'clear' to clear the screen\n";
-    setColor(37);
-    cout << "Enter a command: ";
+    printHeader();
 
     bool run = true; // flag for running or ending loop
     string input;
