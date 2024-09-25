@@ -90,10 +90,15 @@ int main() {
         }
         else if (input.find("screen -s") == 0) {
             string processName = input.substr(10);
-            ProcessScreen newScreen = { processName, 0, 100, getTimeStamp() };
-            processScreens[processName] = newScreen;
-            currentScreen = processName;
-            displayScreen(processName);
+            if (processScreens.find(processName) == processScreens.end()) {
+            	ProcessScreen newScreen = { processName, 0, 100, getTimeStamp() };
+	            processScreens[processName] = newScreen;
+	            currentScreen = processName;
+	            displayScreen(processName);
+			}
+            else {
+            	cout << "Process " << processName << " already exists.\n";
+			}
         }
         else if (input.find("screen -r") == 0) {
             string processName = input.substr(10);
