@@ -17,7 +17,7 @@ struct ProcessScreen {
 // function to get local time stamp
 string getTimeStamp() {
     time_t now = time(0);
-    tm *ltm = localtime(&now);
+    tm* ltm = localtime(&now);
     char buffer[80];
     strftime(buffer, 80, "%m/%d/%Y, %I:%M:%S %p", ltm);
 
@@ -27,11 +27,11 @@ string getTimeStamp() {
 map<string, ProcessScreen> processScreens; // map used for storing process screens, uses process name as key
 
 void clearScreen() {
-    #ifdef _WIN32
-        system("cls");  // Windows
-    #else
-        system("clear");  // Unix/Linux/Mac
-    #endif
+#ifdef _WIN32
+    system("cls");  // Windows
+#else
+    system("clear");  // Unix/Linux/Mac
+#endif
 }
 
 // use ANSI color codes for reference: https://www.geeksforgeeks.org/how-to-change-console-color-in-cpp/
@@ -67,17 +67,19 @@ void displayScreen(const string& processName) {
         cout << "Process: " << ps.processName << endl;
         cout << "Instructions: " << ps.currentLine << "/" << ps.totalLines << endl;
         cout << "Screen created at: " << ps.timeStamp << endl;
-    } else {
+    }
+    else {
         cout << "Process '" << processName << "' not found.\n";
     }
 }
+
 
 int main() {
     printHeader();
     bool run = true; // flag for running or ending loop
     string input;
     string currentScreen = "";
-    
+
     // loop for command line choices
     while (run) {
         getline(cin, input);
@@ -85,32 +87,45 @@ int main() {
         if (input == "initialize") {
             cout << "Initialize command recognized. Doing something.\n";
             cout << "Enter a command: "; // replace with actual command logic later
-        } else if (input.find("screen -s") == 0) {
+        }
+        else if (input.find("screen -s") == 0) {
             string processName = input.substr(10);
-            ProcessScreen newScreen = {processName, 0, 100, getTimeStamp()};
+            ProcessScreen newScreen = { processName, 0, 100, getTimeStamp() };
             processScreens[processName] = newScreen;
             currentScreen = processName;
             displayScreen(processName);
-        } else if (input == "scheduler-test") {
+        }
+        else if (input.find("screen -r") == 0) {
+            string processName = input.substr(10);
+            currentScreen = processName;
+            displayScreen(processName);
+        }
+        else if (input == "scheduler-test") {
             cout << "Scheduler-test command recognized. Doing something.\n";
             cout << "Enter a command: "; // replace with actual command logic later
-        } else if (input == "scheduler-stop") {
+        }
+        else if (input == "scheduler-stop") {
             cout << "Scheduler-stop command recognized. Doing something.\n";
             cout << "Enter a command: "; // replace with actual command logic later
-        } else if (input == "report-util") {
+        }
+        else if (input == "report-util") {
             cout << "Report-util command recognized. Doing something.\n";
             cout << "Enter a command: "; // replace with actual command logic later
-        } else if (input == "clear") {
+        }
+        else if (input == "clear") {
             clearScreen();
             printHeader();
-        } else if (input == "exit") {
+        }
+        else if (input == "exit") {
             if (!currentScreen.empty()) {
                 currentScreen = "";
                 printHeader();
-            } else {
+            }
+            else {
                 run = false;
             }
-        } else {
+        }
+        else {
             cout << "Command not recognized. Please try again.\n";
             cout << "Enter a command: ";
         }
