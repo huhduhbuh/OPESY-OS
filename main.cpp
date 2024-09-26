@@ -25,6 +25,7 @@ string getTimeStamp() {
 }
 
 map<string, ProcessScreen> processScreens; // map used for storing process screens, uses process name as key
+string currentScreen = "";
 
 void clearScreen() {
 #ifdef _WIN32
@@ -53,7 +54,6 @@ void printHeader() {
     setColor(33);
     cout << "Type 'exit' to quit, 'clear' to clear the screen\n";
     setColor(37);
-    cout << "Enter a command: ";
 }
 
 // function for displaying new process screen information after screen -s is entered
@@ -70,6 +70,7 @@ void displayScreen(const string& processName) {
     }
     else {
         cout << "Process '" << processName << "' not found.\n";
+        currentScreen = "";
     }
 }
 
@@ -78,10 +79,10 @@ int main() {
     printHeader();
     bool run = true; // flag for running or ending loop
     string input;
-    string currentScreen = "";
 
     // loop for command line choices
     while (run) {
+        cout << "Enter a command: ";
         getline(cin, input);
 
         if (input == "initialize") {
@@ -107,15 +108,12 @@ int main() {
         }
         else if (input == "scheduler-test") {
             cout << "Scheduler-test command recognized. Doing something.\n";
-            cout << "Enter a command: "; // replace with actual command logic later
         }
         else if (input == "scheduler-stop") {
             cout << "Scheduler-stop command recognized. Doing something.\n";
-            cout << "Enter a command: "; // replace with actual command logic later
         }
         else if (input == "report-util") {
             cout << "Report-util command recognized. Doing something.\n";
-            cout << "Enter a command: "; // replace with actual command logic later
         }
         else if (input == "clear") {
             clearScreen();
@@ -132,7 +130,6 @@ int main() {
         }
         else {
             cout << "Command not recognized. Please try again.\n";
-            cout << "Enter a command: ";
         }
     }
 
