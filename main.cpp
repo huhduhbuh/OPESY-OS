@@ -5,11 +5,14 @@
 #include <map>
 #include <iomanip>
 #include <curses.h>
-#include <windows.h>
+#include <windows.h> // for windows
 #include <vector> 
 #include <algorithm>
-#include <cctype>
+#include <cctype> 
 #include <thread>
+#include <fstream>
+//#include <ncurses.h> //for mac
+//#include <unistd.h> // for mac
 using namespace std;
 
 void mainMenu(); 
@@ -78,6 +81,21 @@ void printHeader() {
     attron(COLOR_PAIR(1));
 }
 
+void logPrint(ProcessScreen& ps, const string& message) {
+    ofstream logFile;
+    string filePath = "/Users/diego/Downloads/CSOPESY/OPESY-OS/" + ps.processName + "_log.txt"; // Change to your own file path
+    logFile.open(filePath, ios::app); // append mode
+
+    if (logFile.is_open()) {
+        string timeStamp = getTimeStamp();
+        logFile << "(" << timeStamp << ") Core:" << ps.core << " \"" << message << "\"" << endl;
+        logFile.close();
+        printw("Logged: %s\n", message.c_str());
+    } else {
+        printw("Error: Unable to open log file.\n");
+    }
+}
+
 // function for displaying new process screen information after screen -s is entered
 // note: the const string& basically allows the process name to still be referenced for screen -r
 void displayScreen(const string& processName) {
@@ -99,6 +117,9 @@ void displayScreen(const string& processName) {
             currentScreen = "";
             printHeader();
             break;
+        } else if (input.find("print") == 0) {
+            string message = input.substr(6);
+            logPrint(ps, message);
         } else {
             printw("Command not recognized. Please try again.\n");
         }
@@ -126,7 +147,8 @@ void executeProcess(int cpu) {
         if (executing == true && scheduleQueue[schedCounter-1].currentLine == scheduleQueue[schedCounter-1].totalLines) {
             executing = false;
         }
-        Sleep(100);
+        Sleep(100); //for windows
+        //usleep(100); // for mac
     }
 }
 
