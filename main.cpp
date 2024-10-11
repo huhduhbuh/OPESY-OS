@@ -83,14 +83,14 @@ void printHeader() {
 
 void logPrint(ProcessScreen& ps, const string& message) {
     ofstream logFile;
-    string filePath = "/Users/diego/Downloads/CSOPESY/OPESY-OS/" + ps.processName + "_log.txt"; // Change to your own file path
+    string filePath = "C:\\Users\\Theoni\\Downloads\\" + ps.processName + "_log.txt"; // Change to your own file path
     logFile.open(filePath, ios::app); // append mode
 
     if (logFile.is_open()) {
         string timeStamp = getTimeStamp();
         logFile << "(" << timeStamp << ") Core:" << ps.core << " \"" << message << "\"" << endl;
         logFile.close();
-        printw("Logged: %s\n", message.c_str());
+        //printw("Logged: %s\n", message.c_str());
     } else {
         printw("Error: Unable to open log file.\n");
     }
@@ -117,9 +117,6 @@ void displayScreen(const string& processName) {
             currentScreen = "";
             printHeader();
             break;
-        } else if (input.find("print") == 0) {
-            string message = input.substr(6);
-            logPrint(ps, message);
         } else {
             printw("Command not recognized. Please try again.\n");
         }
@@ -142,6 +139,7 @@ void executeProcess(int cpu) {
             }
         } else { // increment if cpu has a process to execute
             scheduleQueue[schedCounter-1].currentLine++;
+            logPrint(scheduleQueue[schedCounter-1], "Hello World from " + scheduleQueue[schedCounter-1].processName);
         }
         // check for completion
         if (executing == true && scheduleQueue[schedCounter-1].currentLine == scheduleQueue[schedCounter-1].totalLines) {
@@ -182,7 +180,7 @@ void mainMenu() {
             printw("Enter a command: "); 
         }
         else if (input.find("screen -s") == 0) {
-            string processName = input.substr(10);
+            string processName = trim(input.substr(9));
             if (processScreens.find(processName) == processScreens.end()) {
             	ProcessScreen newScreen = { processName, 0, 100, getTimeStamp(), assignCore() };
 	            processScreens[processName] = newScreen;
