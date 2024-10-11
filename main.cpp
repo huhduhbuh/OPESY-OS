@@ -83,18 +83,31 @@ void printHeader() {
 
 void logPrint(ProcessScreen& ps, const string& message) {
     ofstream logFile;
-    string filePath = "C:\\Users\\Theoni\\Downloads\\" + ps.processName + "_log.txt"; // Change to your own file path
-    logFile.open(filePath, ios::app); // append mode
+    string filePath = "D:\\Documents\\Term 1\\CSOPESY\\OPESY-OS-main\\OPESY-OS-main\\" + ps.processName + "_log.txt"; // Change to your own file path
+
+    ifstream checkFile(filePath);
+    bool fileExists = checkFile.is_open();
+    checkFile.close();
+
+    // Open file in append mode
+    logFile.open(filePath, ios::app);
 
     if (logFile.is_open()) {
+        if (!fileExists) {
+            logFile << "Process name: " << ps.processName << endl;
+            logFile << "Logs: \n" << endl;
+        }
+
         string timeStamp = getTimeStamp();
         logFile << "(" << timeStamp << ") Core:" << ps.core << " \"" << message << "\"" << endl;
+
         logFile.close();
-        //printw("Logged: %s\n", message.c_str());
-    } else {
+    }
+    else {
         printw("Error: Unable to open log file.\n");
     }
 }
+
 
 // function for displaying new process screen information after screen -s is entered
 // note: the const string& basically allows the process name to still be referenced for screen -r
@@ -139,7 +152,7 @@ void executeProcess(int cpu) {
             }
         } else { // increment if cpu has a process to execute
             scheduleQueue[schedCounter-1].currentLine++;
-            logPrint(scheduleQueue[schedCounter-1], "Hello World from " + scheduleQueue[schedCounter-1].processName);
+            logPrint(scheduleQueue[schedCounter-1], "Hello world from " + scheduleQueue[schedCounter-1].processName + "!");
         }
         // check for completion
         if (executing == true && scheduleQueue[schedCounter-1].currentLine == scheduleQueue[schedCounter-1].totalLines) {
