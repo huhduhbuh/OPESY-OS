@@ -250,7 +250,6 @@ void mainMenu() {
             if (input == "initialize") {
                 initializeProgram("config.txt");
                 printw("Program initialized. Obtained data from config.txt.\n");
-                printw("Enter a command: ");
             }
             else {
                 run = false;
@@ -263,7 +262,6 @@ void mainMenu() {
             if (input == "initialize") {
                 initializeProgram("config.txt");
                 printw("Program initialized. Obtained data from config.txt.\n");
-                printw("Enter a command: ");
             }
             else if (input.find("screen -s") == 0) {
                 string processName = trim(input.substr(9));
