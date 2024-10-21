@@ -320,7 +320,36 @@ void mainMenu() {
                 printw("Execution of processes stopped...\n");
             }
             else if (input == "report-util") {
-                printw("Report-util command recognized. Doing something.\n");
+                string formatTime;
+                ProcessScreen p;
+                vector<ProcessScreen> finished;
+
+                std::ofstream logFile("csopesy-log.txt", std::ios::app);
+
+                logFile << "Running processes: \n";
+                for (long long unsigned int i = 0; i < scheduleQueue.size(); i++) {
+                    p = scheduleQueue[i];
+                    formatTime = p.timeStamp;
+                    formatTime.erase(10, 1);
+                    if (p.currentLine != p.totalLines) {
+                        logFile << p.processName << "\t(" << formatTime << ")\tCore: " << p.core
+                            << "\t\t" << p.currentLine << " / " << p.totalLines << "\n";
+                    }
+                    else {
+                        finished.push_back(p);
+                    }
+                }
+
+                logFile << "Finished processes: \n";
+                for (long long unsigned int i = 0; i < finished.size(); i++) {
+                    p = finished[i];
+                    logFile << p.processName << "\t(" << formatTime << ")\tCore: " << p.core
+                        << "\t\t" << p.currentLine << " / " << p.totalLines << "\n";
+                }
+
+                // Close the file after writing
+                logFile.close();
+
             }
             else if (input == "clear") {
                 clearScreen();
