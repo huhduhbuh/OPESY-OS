@@ -11,11 +11,22 @@
 #include <cctype> 
 #include <thread>
 #include <fstream>
+#include <sstream>
+
 //#include <ncurses.h> //for mac
 //#include <unistd.h> // for mac
 using namespace std;
 
 void mainMenu(); 
+
+int num_cpu = 0;
+std::string scheduler;
+int quantum_cycles = 0;
+int batch_process_freq = 0;
+int min_ins = 0;
+int max_ins = 0;
+int delay_per_exec = 0;
+int initialized = 0;
 
 // trim from the start (left)
 string ltrim(const string& str) {
@@ -173,6 +184,53 @@ int assignCore(){
     return index;
 }
 
+// loads config.txt values onto the global variables
+void initializeProgram(const std::string& filename) {
+    std::ifstream configFile(filename);
+
+    if (!configFile) {
+        std::cerr << "Unable to open " << filename << " file" << std::endl;
+        return;
+    }
+
+    std::string line;
+    while (std::getline(configFile, line)) {
+        std::istringstream iss(line);
+        std::string key;
+
+        if (iss >> key) {
+            if (key == "num-cpu") {
+                iss >> num_cpu;
+            }
+            else if (key == "scheduler") {
+                iss >> scheduler;
+                // Remove the surrounding double quotes from the scheduler
+                if (!scheduler.empty() && scheduler[0] == '"') {
+                    scheduler = scheduler.substr(1, scheduler.size() - 2);
+                }
+            }
+            else if (key == "quantum-cycles") {
+                iss >> quantum_cycles;
+            }
+            else if (key == "batch-process-freq") {
+                iss >> batch_process_freq;
+            }
+            else if (key == "min-ins") {
+                iss >> min_ins;
+            }
+            else if (key == "max-ins") {
+                iss >> max_ins;
+            }
+            else if (key == "delay-per-exec") {
+                iss >> delay_per_exec;
+            }
+        }
+    }
+
+    configFile.close();
+    initialized = 1;
+}
+
 
 void mainMenu() {
     printHeader();
@@ -185,83 +243,100 @@ void mainMenu() {
         printw("Enter a command: ");
         refresh();
 
-        wgetnstr(stdscr, buffer, sizeof(buffer)-1);
+        wgetnstr(stdscr, buffer, sizeof(buffer) - 1);
         input = buffer;
 
-        if (input == "initialize") {
-            printw("Initialize command recognized. Doing something.\n");
-            printw("Enter a command: "); 
-        }
-        else if (input.find("screen -s") == 0) {
-            string processName = trim(input.substr(9));
-            if (processScreens.find(processName) == processScreens.end()) {
-            	ProcessScreen newScreen = { processName, 0, 100, getTimeStamp(), assignCore() };
-	            processScreens[processName] = newScreen;
-                scheduleQueue.push_back(newScreen);
-	            currentScreen = processName;
-	            displayScreen(processName);
-			}
+        if (initialized == 0 && (input == "initialize" || input == "exit")) {
+            if (input == "initialize") {
+                initializeProgram("config.txt");
+                printw("Program initialized. Obtained data from config.txt.\n");
+                printw("Enter a command: ");
+            }
             else {
-            	printw("Process %s already exists.\n", processName.c_str());
-			}
-        }
-        else if (input.find("screen -r") == 0) {
-            string processName = trim(input.substr(9));
-            if (processScreens.find(processName) != processScreens.end()) {
-                currentScreen = processName;
-                displayScreen(processName);
-            } else {
-                printw("Process '%s' not found.\n", processName.c_str());
-                currentScreen = "";
+                run = false;
             }
         }
-        else if (input.find("screen -ls") == 0) {
-            string formatTime;
-            ProcessScreen p;
-            vector<ProcessScreen> finished;
-            printw("Running processes: \n");
-            for (long long unsigned int i = 0; i < scheduleQueue.size(); i++) {
-                p = scheduleQueue[i];
-                formatTime = p.timeStamp;
-                formatTime.erase(10, 1);
-                if (p.currentLine != p.totalLines)
-                    printw("%s\t(%s)\tCore: %d\t\t%d / %d\n", p.processName.c_str(), formatTime.c_str(), p.core, p.currentLine, p.totalLines);
-                else 
-                    finished.push_back(p);
-            }
-            printw("Finished processes: \n");
-            for (long long unsigned int i = 0; i < finished.size(); i++) {
-                p = finished[i];
-                printw("%s\t(%s)\tCore: %d\t\t%d / %d\n", p.processName.c_str(), formatTime.c_str(), p.core, p.currentLine, p.totalLines);
-            }
-        }
-        else if (input == "scheduler-test") {
-            for (long long unsigned int i = 0; i < coreLoads.size(); i++) {
-                thread t(executeProcess, i);
-                t.detach();
-            }
-            printw("Executing processes...\n");
-            stop = false;
-        }
-        else if (input == "scheduler-stop") {
-            stop = true;
-            printw("Execution of processes stopped...\n");
-        }
-        else if (input == "report-util") {
-            printw("Report-util command recognized. Doing something.\n");
-        }
-        else if (input == "clear") {
-            clearScreen();
-            printHeader();
-        }
-        else if (input == "exit") {
-            run = false;
+        else if (initialized == 0 && input != "initialize") {
+            printw("Command is invalid. Please initialize the program first.\n");
         }
         else {
-            printw("Command not recognized. Please try again.\n");
+            if (input == "initialize") {
+                initializeProgram("config.txt");
+                printw("Program initialized. Obtained data from config.txt.\n");
+                printw("Enter a command: ");
+            }
+            else if (input.find("screen -s") == 0) {
+                string processName = trim(input.substr(9));
+                if (processScreens.find(processName) == processScreens.end()) {
+                    ProcessScreen newScreen = { processName, 0, 100, getTimeStamp(), assignCore() };
+                    processScreens[processName] = newScreen;
+                    scheduleQueue.push_back(newScreen);
+                    currentScreen = processName;
+                    displayScreen(processName);
+                }
+                else {
+                    printw("Process %s already exists.\n", processName.c_str());
+                }
+            }
+            else if (input.find("screen -r") == 0) {
+                string processName = trim(input.substr(9));
+                if (processScreens.find(processName) != processScreens.end()) {
+                    currentScreen = processName;
+                    displayScreen(processName);
+                }
+                else {
+                    printw("Process '%s' not found.\n", processName.c_str());
+                    currentScreen = "";
+                }
+            }
+            else if (input.find("screen -ls") == 0) {
+                string formatTime;
+                ProcessScreen p;
+                vector<ProcessScreen> finished;
+                printw("Running processes: \n");
+                for (long long unsigned int i = 0; i < scheduleQueue.size(); i++) {
+                    p = scheduleQueue[i];
+                    formatTime = p.timeStamp;
+                    formatTime.erase(10, 1);
+                    if (p.currentLine != p.totalLines)
+                        printw("%s\t(%s)\tCore: %d\t\t%d / %d\n", p.processName.c_str(), formatTime.c_str(), p.core, p.currentLine, p.totalLines);
+                    else
+                        finished.push_back(p);
+                }
+                printw("Finished processes: \n");
+                for (long long unsigned int i = 0; i < finished.size(); i++) {
+                    p = finished[i];
+                    printw("%s\t(%s)\tCore: %d\t\t%d / %d\n", p.processName.c_str(), formatTime.c_str(), p.core, p.currentLine, p.totalLines);
+                }
+            }
+            else if (input == "scheduler-test") {
+                for (long long unsigned int i = 0; i < coreLoads.size(); i++) {
+                    thread t(executeProcess, i);
+                    t.detach();
+                }
+                printw("Executing processes...\n");
+                stop = false;
+            }
+            else if (input == "scheduler-stop") {
+                stop = true;
+                printw("Execution of processes stopped...\n");
+            }
+            else if (input == "report-util") {
+                printw("Report-util command recognized. Doing something.\n");
+            }
+            else if (input == "clear") {
+                clearScreen();
+                printHeader();
+            }
+            else if (input == "exit") {
+                run = false;
+            }
+            else {
+                printw("Command not recognized. Please try again.\n");
+            }
         }
+        refresh();
     }
-    refresh();
 }
 
 int main() {
