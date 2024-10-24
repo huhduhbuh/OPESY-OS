@@ -20,7 +20,7 @@
 //#include <unistd.h> // for mac
 using namespace std;
 
-void mainMenu(); 
+void mainMenu();
 
 int cpu_cycles = 0;
 mutex mtx;
@@ -110,13 +110,14 @@ void printHeader() {
     attron(COLOR_PAIR(1));
 }
 
-void processSMI(ProcessScreen &ps) {
+void processSMI(ProcessScreen& ps) {
     if (ps.currentLine < ps.totalLines) {
         printw("\nProcess: %s\n", ps.processName.c_str());
         printw("ID: %d\n\n", ps.pid);
         printw("Current instruction line: %d\n", ps.currentLine);
         printw("Lines of code: %d\n\n", ps.totalLines);
-    } else if (ps.currentLine == ps.totalLines) {
+    }
+    else if (ps.currentLine == ps.totalLines) {
         printw("\nProcess: %s\n", ps.processName.c_str());
         printw("ID: %d\n\n", ps.pid);
         printw("Finished!\n\n");
@@ -138,16 +139,18 @@ void displayScreen(const string& processName) {
     while (true) {
         printw("Enter a command: ");
         refresh();
-        wgetnstr(stdscr, buffer, sizeof(buffer)-1);
+        wgetnstr(stdscr, buffer, sizeof(buffer) - 1);
         input = buffer;
 
         if (input == "exit") {
             currentScreen = "";
             printHeader();
             break;
-        } else if (input == "process-smi") {
+        }
+        else if (input == "process-smi") {
             processSMI(ps);
-        } else {
+        }
+        else {
             printw("Command not recognized. Please try again.\n");
         }
     }
@@ -158,7 +161,7 @@ void core(int cpu) {
     int numActualExecs = 0; // how many times cpu was actually able to process smth
     while (true) {
         mtx.lock();
-        if (ceil(cpu_cycles/(float)(delay_per_exec+1)) >= numActualExecs) {
+        if (ceil(cpu_cycles / (float)(delay_per_exec + 1)) >= numActualExecs) {
             // sync with cpu_cycles
             numActualExecs++;
 
@@ -247,7 +250,7 @@ void RRScheduler() {
                 scheduleQueue.pop_front();
                 coreProcesses[i].flagCounter = quantum_cycles;
             }
-            
+
         }
     }
 }
@@ -279,7 +282,8 @@ void startClock() {
         cpu_cycles++;
         if (scheduler == "fcfs") {
             FCFSScheduler();
-        } else {
+        }
+        else {
             RRScheduler();
         }
 
@@ -290,7 +294,7 @@ void startClock() {
                 pid++;
                 proposedName = "p" + to_string(pid);
             }
-            ProcessScreen newScreen = { pid, proposedName, 0, rand()%(max_ins-min_ins + 1) + min_ins, getTimeStamp(), -1};
+            ProcessScreen newScreen = { pid, proposedName, 0, rand() % (max_ins - min_ins + 1) + min_ins, getTimeStamp(), -1 };
             pid++;
             processScreens[proposedName] = newScreen;
             scheduleQueue.push_back(newScreen);
@@ -338,7 +342,7 @@ void mainMenu() {
                 string processName = trim(input.substr(9));
                 if (processScreens.find(processName) == processScreens.end()) {
                     mtx.lock();
-                    ProcessScreen newScreen = { pid, processName, 0, rand()%(max_ins-min_ins + 1) + min_ins, getTimeStamp(), -1};
+                    ProcessScreen newScreen = { pid, processName, 0, rand() % (max_ins - min_ins + 1) + min_ins, getTimeStamp(), -1 };
                     pid++;
                     processScreens[processName] = newScreen;
                     scheduleQueue.push_back(newScreen);
@@ -357,7 +361,7 @@ void mainMenu() {
                     currentScreen = processName;
                     displayScreen(processName);
                 }
-                else if (ps.currentLine == ps.totalLines) { 
+                else if (ps.currentLine == ps.totalLines) {
                     printw("Process '%s' has already finished.\n", processName.c_str());
                     currentScreen = "";
                 }
@@ -370,7 +374,21 @@ void mainMenu() {
                 mtx.lock();
                 string formatTime;
                 ProcessScreen p;
-                printw("Running processes: \n");
+
+                int active_cores = 0;
+                for (int i = 0; i < num_cpu; i++) {
+                    if (coreProcesses[i].flagCounter > 0) {
+                        active_cores++;
+                    }
+                }
+                float utilization = (active_cores / (float)num_cpu) * 100;
+                
+                printw("CPU utilization: %3.2f%%\n", utilization);
+                printw("Cores used: %d\n", active_cores);
+                printw("Cores available: %d", num_cpu - active_cores);
+                printw("\n\n--------------------------------------");
+
+                printw("\nRunning processes: \n");
                 for (int i = 0; i < num_cpu; i++) {
                     if (coreProcesses[i].process.processName != "" && coreProcesses[i].process.currentLine != coreProcesses[i].process.totalLines) {
                         p = coreProcesses[i].process;
@@ -379,7 +397,7 @@ void mainMenu() {
                         printw("%s\t(%s)\tCore: %d\t\t%d / %d\n", p.processName.c_str(), formatTime.c_str(), p.core, p.currentLine, p.totalLines);
                     }
                 }
-                printw("Finished processes: \n");
+                printw("\nFinished processes: \n");
                 vector<pair<string, ProcessScreen>> sortedMap;
                 for (const auto& it : processScreens) {
                     sortedMap.push_back(it);
@@ -389,16 +407,19 @@ void mainMenu() {
                     p = it.second;
                     if (p.currentLine == p.totalLines) {
                         formatTime = p.timeStamp;
-                        formatTime.erase(10, 1);                    
+                        formatTime.erase(10, 1);
                         printw("%s\t(%s)\tCore: %d\t\t%d / %d\n", p.processName.c_str(), formatTime.c_str(), p.core, p.currentLine, p.totalLines);
                     }
                 }
+
+                printw("\n--------------------------------------\n\n");
                 mtx.unlock();
             }
             else if (input == "scheduler-test") {
                 if (generating == true) {
                     printw("Already generating dummy processes...\n");
-                } else {
+                }
+                else {
                     generating = true;
                     printw("Generating dummy processes...\n");
                 }
@@ -406,7 +427,8 @@ void mainMenu() {
             else if (input == "scheduler-stop") {
                 if (generating == false) {
                     printw("Already stopped generating dummy processes...\n");
-                } else {
+                }
+                else {
                     generating = false;
                     printw("Stopped generating dummy processes...\n");
                 }
@@ -416,7 +438,20 @@ void mainMenu() {
                 string formatTime;
                 ProcessScreen p;
 
+                int active_cores = 0;
+                for (int i = 0; i < num_cpu; i++) {
+                    if (coreProcesses[i].flagCounter > 0) {
+                        active_cores++;
+                    }
+                }
+                float utilization = (active_cores / (float)num_cpu) * 100;
+
                 std::ofstream logFile("csopesy-log.txt", std::ios::out);
+
+                logFile << "CPU utilization: " << std::fixed << std::setprecision(2) << utilization << "%\n";
+                logFile << "Cores used: " << active_cores << "\n";
+                logFile << "Cores available: " << num_cpu - active_cores << "\n";
+                logFile << "\n--------------------------------------\n";
 
                 logFile << "Running processes: \n";
                 for (int i = 0; i < num_cpu; i++) {
@@ -425,10 +460,11 @@ void mainMenu() {
                         formatTime = p.timeStamp;
                         formatTime.erase(10, 1);
                         logFile << p.processName << "\t(" << formatTime << ")\tCore: " << p.core
-                            << "\t\t" << p.currentLine << " / " << p.totalLines << "\n";    
-                    }            
+                            << "\t\t" << p.currentLine << " / " << p.totalLines << "\n";
+                    }
                 }
-                logFile << "Finished processes: \n";
+
+                logFile << "\nFinished processes: \n";
                 vector<pair<string, ProcessScreen>> sortedMap;
                 for (const auto& it : processScreens) {
                     sortedMap.push_back(it);
@@ -438,15 +474,16 @@ void mainMenu() {
                     p = it.second;
                     if (p.currentLine == p.totalLines) {
                         formatTime = p.timeStamp;
-                        formatTime.erase(10, 1);                    
+                        formatTime.erase(10, 1);
                         logFile << p.processName << "\t(" << p.timeStamp << ")\tCore: " << p.core
-                            << "\t\t" << p.currentLine << " / " << p.totalLines << "\n";                     
+                            << "\t\t" << p.currentLine << " / " << p.totalLines << "\n";
                     }
                 }
-                // Close the file after writing
+
+                logFile << "\n--------------------------------------\n\n";
+
                 logFile.close();
                 mtx.unlock();
-
             }
             else if (input == "clear") {
                 clearScreen();
@@ -466,7 +503,7 @@ void mainMenu() {
 int main() {
     initscr();
     start_color();
-    scrollok(stdscr,TRUE);
+    scrollok(stdscr, TRUE);
     init_pair(1, COLOR_WHITE, COLOR_BLACK);
     init_pair(2, COLOR_YELLOW, COLOR_BLACK);
     init_pair(3, COLOR_GREEN, COLOR_BLACK);
