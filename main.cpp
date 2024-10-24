@@ -110,6 +110,19 @@ void printHeader() {
     attron(COLOR_PAIR(1));
 }
 
+void processSMI(ProcessScreen &ps) {
+    if (ps.currentLine < ps.totalLines) {
+        printw("\nProcess: %s\n", ps.processName.c_str());
+        printw("ID: %d\n\n", ps.pid);
+        printw("Current instruction line: %d\n", ps.currentLine);
+        printw("Lines of code: %d\n\n", ps.totalLines);
+    } else if (ps.currentLine == ps.totalLines) {
+        printw("\nProcess: %s\n", ps.processName.c_str());
+        printw("ID: %d\n\n", ps.pid);
+        printw("Finished!\n\n");
+    }
+}
+
 // function for displaying new process screen information after screen -s is entered
 // note: the const string& basically allows the process name to still be referenced for screen -r
 void displayScreen(const string& processName) {
@@ -127,10 +140,13 @@ void displayScreen(const string& processName) {
         refresh();
         wgetnstr(stdscr, buffer, sizeof(buffer)-1);
         input = buffer;
+
         if (input == "exit") {
             currentScreen = "";
             printHeader();
             break;
+        } else if (input == "process-smi") {
+            processSMI(ps);
         } else {
             printw("Command not recognized. Please try again.\n");
         }
@@ -336,9 +352,14 @@ void mainMenu() {
             }
             else if (input.find("screen -r") == 0) {
                 string processName = trim(input.substr(9));
-                if (processScreens.find(processName) != processScreens.end()) {
+                ProcessScreen& ps = processScreens[processName];
+                if (processScreens.find(processName) != processScreens.end() && ps.currentLine != ps.totalLines) {
                     currentScreen = processName;
                     displayScreen(processName);
+                }
+                else if (ps.currentLine == ps.totalLines) { 
+                    printw("Process '%s' has already finished.\n", processName.c_str());
+                    currentScreen = "";
                 }
                 else {
                     printw("Process '%s' not found.\n", processName.c_str());
