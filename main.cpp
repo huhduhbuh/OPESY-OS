@@ -300,7 +300,7 @@ void startClock() {
             scheduleQueue.push_back(newScreen);
         }
         mtx.unlock();
-        napms(10); // sleep, milliseconds
+        // napms(10); // sleep, milliseconds
     }
 }
 
