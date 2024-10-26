@@ -340,7 +340,9 @@ void mainMenu() {
             }
             else if (input.find("screen -s") == 0) {
                 string processName = trim(input.substr(9));
-                if (processScreens.find(processName) == processScreens.end()) {
+                if (processName == "") {
+                    printw("Can't have a blank process name.\n");
+                } else if (processScreens.find(processName) == processScreens.end()) {
                     mtx.lock();
                     ProcessScreen newScreen = { pid, processName, 0, rand() % (max_ins - min_ins + 1) + min_ins, getTimeStamp(), -1 };
                     pid++;
@@ -349,8 +351,7 @@ void mainMenu() {
                     currentScreen = processName;
                     mtx.unlock();
                     displayScreen(processName);
-                }
-                else {
+                } else {
                     printw("Process %s already exists.\n", processName.c_str());
                 }
             }
