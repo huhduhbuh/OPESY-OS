@@ -376,11 +376,13 @@ void mainMenu() {
                 ProcessScreen p;
 
                 int active_cores = 0;
+                int unfinishedProcesses = scheduleQueue.size();
                 for (int i = 0; i < num_cpu; i++) {
-                    if (coreProcesses[i].flagCounter > 0) {
-                        active_cores++;
+                    if (coreProcesses[i].process.processName != "" && coreProcesses[i].process.currentLine != coreProcesses[i].process.totalLines) {
+                        unfinishedProcesses++;
                     }
                 }
+                active_cores = unfinishedProcesses < num_cpu ? unfinishedProcesses : num_cpu;
                 float utilization = (active_cores / (float)num_cpu) * 100;
                 
                 printw("CPU utilization: %3.2f%%\n", utilization);
@@ -439,11 +441,13 @@ void mainMenu() {
                 ProcessScreen p;
 
                 int active_cores = 0;
+                int unfinishedProcesses = scheduleQueue.size();
                 for (int i = 0; i < num_cpu; i++) {
-                    if (coreProcesses[i].flagCounter > 0) {
-                        active_cores++;
+                    if (coreProcesses[i].process.processName != "" && coreProcesses[i].process.currentLine != coreProcesses[i].process.totalLines) {
+                        unfinishedProcesses++;
                     }
                 }
+                active_cores = unfinishedProcesses < num_cpu ? unfinishedProcesses : num_cpu;
                 float utilization = (active_cores / (float)num_cpu) * 100;
 
                 std::ofstream logFile("csopesy-log.txt", std::ios::out);
