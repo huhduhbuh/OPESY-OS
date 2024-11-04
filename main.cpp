@@ -23,7 +23,6 @@ using namespace std;
 void mainMenu();
 
 int cpu_cycles = 0;
-mutex mtx;
 int num_cpu = 0;
 std::string scheduler;
 int quantum_cycles = 0;
@@ -160,7 +159,6 @@ void displayScreen(const string& processName) {
 void core(int cpu) {
     int numActualExecs = 0; // how many times cpu was actually able to process smth
     while (true) {
-        mtx.lock();
         if (ceil(cpu_cycles / (float)(delay_per_exec + 1)) >= numActualExecs) {
             // sync with cpu_cycles
             numActualExecs++;
@@ -181,7 +179,6 @@ void core(int cpu) {
                 }
             }
         }
-        mtx.unlock();
     }
 }
 
@@ -278,7 +275,6 @@ void startClock() {
     }
 
     while (true) {
-        mtx.lock();
         cpu_cycles++;
         if (scheduler == "fcfs") {
             FCFSScheduler();
@@ -299,8 +295,7 @@ void startClock() {
             processScreens[proposedName] = newScreen;
             scheduleQueue.push_back(newScreen);
         }
-        mtx.unlock();
-        // napms(10); // sleep, milliseconds
+        napms(100); // sleep, milliseconds
     }
 }
 
@@ -343,13 +338,11 @@ void mainMenu() {
                 if (processName == "") {
                     printw("Can't have a blank process name.\n");
                 } else if (processScreens.find(processName) == processScreens.end()) {
-                    mtx.lock();
                     ProcessScreen newScreen = { pid, processName, 0, rand() % (max_ins - min_ins + 1) + min_ins, getTimeStamp(), -1 };
                     pid++;
                     processScreens[processName] = newScreen;
                     scheduleQueue.push_back(newScreen);
                     currentScreen = processName;
-                    mtx.unlock();
                     displayScreen(processName);
                 } else {
                     printw("Process %s already exists.\n", processName.c_str());
@@ -372,18 +365,24 @@ void mainMenu() {
                 }
             }
             else if (input.find("screen -ls") == 0) {
-                mtx.lock();
                 string formatTime;
                 ProcessScreen p;
 
                 int active_cores = 0;
-                int unfinishedProcesses = scheduleQueue.size();
+                //int unfinishedProcesses = scheduleQueue.size();
+                /*
                 for (int i = 0; i < num_cpu; i++) {
                     if (coreProcesses[i].process.processName != "" && coreProcesses[i].process.currentLine != coreProcesses[i].process.totalLines) {
                         unfinishedProcesses++;
                     }
+                } */
+
+                for (int i = 0; i < num_cpu; i++) {
+                    if (coreProcesses[i].flagCounter > 0) {
+                        active_cores++;
+                    }
                 }
-                active_cores = unfinishedProcesses < num_cpu ? unfinishedProcesses : num_cpu;
+                //active_cores = unfinishedProcesses < num_cpu ? unfinishedProcesses : num_cpu;
                 float utilization = (active_cores / (float)num_cpu) * 100;
                 
                 printw("CPU utilization: %3.2f%%\n", utilization);
@@ -416,7 +415,6 @@ void mainMenu() {
                 }
 
                 printw("\n--------------------------------------\n\n");
-                mtx.unlock();
             }
             else if (input == "scheduler-test") {
                 if (generating == true) {
@@ -437,18 +435,25 @@ void mainMenu() {
                 }
             }
             else if (input == "report-util") {
-                mtx.lock();
                 string formatTime;
                 ProcessScreen p;
 
                 int active_cores = 0;
-                int unfinishedProcesses = scheduleQueue.size();
+                //int unfinishedProcesses = scheduleQueue.size();
+                /*
                 for (int i = 0; i < num_cpu; i++) {
                     if (coreProcesses[i].process.processName != "" && coreProcesses[i].process.currentLine != coreProcesses[i].process.totalLines) {
                         unfinishedProcesses++;
                     }
                 }
-                active_cores = unfinishedProcesses < num_cpu ? unfinishedProcesses : num_cpu;
+                */
+
+                 for (int i = 0; i < num_cpu; i++) {
+                    if (coreProcesses[i].flagCounter > 0) {
+                        active_cores++;
+                    }
+                }
+                // active_cores = unfinishedProcesses < num_cpu ? unfinishedProcesses : num_cpu;
                 float utilization = (active_cores / (float)num_cpu) * 100;
 
                 std::ofstream logFile("csopesy-log.txt", std::ios::out);
@@ -488,7 +493,6 @@ void mainMenu() {
                 logFile << "\n--------------------------------------\n\n";
 
                 logFile.close();
-                mtx.unlock();
             }
             else if (input == "clear") {
                 clearScreen();
