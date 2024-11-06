@@ -30,6 +30,9 @@ int batch_process_freq = 0;
 int min_ins = 0;
 int max_ins = 0;
 int delay_per_exec = 0;
+int max_overall_mem = 0;
+int mem_per_frame = 0;
+int mem_per_proc = 0;
 int initialized = 0;
 int pid = 0;
 
@@ -65,6 +68,61 @@ struct CoreProcess {
     ProcessScreen process;  // current process the cpu is handling
     int flagCounter;        // > 0 means cpu is executing something
 };
+
+// struct for the memory block
+struct MemoryBlock {
+    int start; // holds starting address of memory block
+    int end; // holds ending address of memory block
+    bool isFree; // boolean to check if memory block is free or not
+    int pid; // process id that is using the memory block
+};
+
+vector<MemoryBlock> memoryBlocks; // vector to hold all memory blocks
+
+// function to allocate memory for a process
+bool allocateMemory(int pid, int memRequired) {
+    memRequired = ceil(memRequired / (float)mem_per_frame) * mem_per_frame; // round up to nearest memory frame size
+
+    // for loop to check for free blocks of memory based on best fit 
+    for (auto& block : memoryBlocks) {
+        if (block.isFree && (block.end - block.start + 1) >= memRequired) {
+            int originalEnd = block.end; //debug
+            block.end = block.start + memRequired - 1; //debug
+            block.isFree = false;
+            block.pid = pid;
+            
+            // splits block into portion of what process n will take up and the rest of the block
+            if ((block.end - block.start + 1) > memRequired) {
+                MemoryBlock newBlock = {block.start + memRequired, block.end, true, -1};
+                block.end = block.start + memRequired - 1;
+                memoryBlocks.insert(memoryBlocks.begin() + (&block - &memoryBlocks[0]) + 1, newBlock);
+            }
+
+            return true;
+        }
+    }
+    // returns false if no memory block is found
+    return false;
+}
+
+void deallocateMemory(int pid) {
+    // checks for all free blocks 
+    for (auto& block : memoryBlocks) {
+        if (block.pid == pid) {
+            block.isFree = true;
+            block.pid = -1;
+        }
+    }
+
+    // merges all the adjacent free blocks back into one block 
+    for (auto i = memoryBlocks.begin(); i != memoryBlocks.end(); i++) {
+        if (i -> isFree && (i + 1) != memoryBlocks.end() && (i + 1) -> isFree) {
+            i -> end = (i + 1) -> end;
+            memoryBlocks.erase(i + 1);
+            i--;
+        }
+    }
+}
 
 // compare by pid
 bool compareByPID(pair<string, ProcessScreen> a, pair<string, ProcessScreen> b) {
@@ -223,11 +281,21 @@ void initializeProgram(const std::string& filename) {
             else if (key == "delay-per-exec") {
                 iss >> delay_per_exec;
             }
+            else if (key == "max-overall-mem") {
+                iss >> max_overall_mem;
+            }
+            else if (key == "mem-per-frame") {
+                iss >> mem_per_frame;
+            }
+            else if (key == "mem-per-proc") {
+                iss >> mem_per_proc;
+            }
         }
     }
 
     configFile.close();
     initialized = 1;
+    memoryBlocks.push_back({0, max_overall_mem - 1, true, -1});
 }
 
 void RRScheduler() {
@@ -236,6 +304,7 @@ void RRScheduler() {
             // if process is not completed, add back to ready/waiting queue
             if (coreProcesses[i].process.processName != "" && coreProcesses[i].process.currentLine != coreProcesses[i].process.totalLines) {
                 scheduleQueue.push_back(coreProcesses[i].process);
+                deallocateMemory(coreProcesses[i].process.pid);
             }
 
             // update assigned core on queues
@@ -244,10 +313,11 @@ void RRScheduler() {
                 coreProcesses[i].process.core = i;
                 processScreens[coreProcesses[i].process.processName].core = i;
 
-                scheduleQueue.pop_front();
-                coreProcesses[i].flagCounter = quantum_cycles;
+                if (allocateMemory(coreProcesses[i].process.pid, mem_per_proc)) {
+                    scheduleQueue.pop_front();
+                    coreProcesses[i].flagCounter = quantum_cycles;                    
+                }
             }
-
         }
     }
 }
@@ -401,6 +471,7 @@ void mainMenu() {
                 }
                 printw("\nFinished processes: \n");
                 vector<pair<string, ProcessScreen>> sortedMap;
+
                 for (const auto& it : processScreens) {
                     sortedMap.push_back(it);
                 }
@@ -476,6 +547,7 @@ void mainMenu() {
 
                 logFile << "\nFinished processes: \n";
                 vector<pair<string, ProcessScreen>> sortedMap;
+            
                 for (const auto& it : processScreens) {
                     sortedMap.push_back(it);
                 }
