@@ -15,10 +15,25 @@
 #include <deque>
 #include <cmath>
 #include <mutex>
+#include <filesystem>
 
 //#include <ncurses.h> //for mac
 //#include <unistd.h> // for mac
 using namespace std;
+
+namespace fs = std::filesystem;
+
+void clearDirectory(const std::string& path) {
+    try {
+        for (const auto& entry : fs::directory_iterator(path)) {
+            if (entry.is_regular_file()) {
+                fs::remove(entry.path()); 
+            }
+        }
+    } catch (const fs::filesystem_error& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+    }
+}
 
 void mainMenu();
 
@@ -35,6 +50,7 @@ int mem_per_frame = 0;
 int mem_per_proc = 0;
 int initialized = 0;
 int pid = 0;
+mutex mtx;
 
 // trim from the start (left)
 string ltrim(const string& str) {
@@ -81,22 +97,22 @@ vector<MemoryBlock> memoryBlocks; // vector to hold all memory blocks
 
 // function to allocate memory for a process
 bool allocateMemory(int pid, int memRequired) {
-    memRequired = ceil(memRequired / (float)mem_per_frame) * mem_per_frame; // round up to nearest memory frame size
+    //memRequired = ceil(memRequired / (float)mem_per_frame) * mem_per_frame; // round up to nearest memory frame size
 
-    // for loop to check for free blocks of memory based on best fit 
+    // for loop to check for free blocks of memory based on first fit 
     for (auto& block : memoryBlocks) {
         if (block.isFree && (block.end - block.start + 1) >= memRequired) {
-            int originalEnd = block.end; //debug
-            block.end = block.start + memRequired - 1; //debug
+          //  int originalEnd = block.end; //debug
+           // block.end = block.start + memRequired - 1; //debug
             block.isFree = false;
             block.pid = pid;
             
             // splits block into portion of what process n will take up and the rest of the block
-            if ((block.end - block.start + 1) > memRequired) {
+           /* if ((block.end - block.start + 1) > memRequired) {
                 MemoryBlock newBlock = {block.start + memRequired, block.end, true, -1};
                 block.end = block.start + memRequired - 1;
                 memoryBlocks.insert(memoryBlocks.begin() + (&block - &memoryBlocks[0]) + 1, newBlock);
-            }
+            }*/
 
             return true;
         }
@@ -115,6 +131,7 @@ void deallocateMemory(int pid) {
     }
 
     // merges all the adjacent free blocks back into one block 
+    /*
     for (auto i = memoryBlocks.begin(); i != memoryBlocks.end(); i++) {
         if (i -> isFree && (i + 1) != memoryBlocks.end() && (i + 1) -> isFree) {
             i -> end = (i + 1) -> end;
@@ -122,6 +139,7 @@ void deallocateMemory(int pid) {
             i--;
         }
     }
+    */
 }
 
 // compare by pid
@@ -223,17 +241,18 @@ void core(int cpu) {
 
             if (coreProcesses[cpu].flagCounter > 0) {
                 // update both scheduleQueue and processScreens
-                coreProcesses[cpu].process.currentLine++;
-                processScreens[coreProcesses[cpu].process.processName].currentLine++;
+                coreProcesses[cpu].process.currentLine += quantum_cycles;
+                processScreens[coreProcesses[cpu].process.processName].currentLine += quantum_cycles;
 
                 // only proper executions will count towards quantum slice counter
                 if (scheduler == "rr") {
-                    coreProcesses[cpu].flagCounter--;
+                    coreProcesses[cpu].flagCounter = 0;
                 }
 
                 // check if complete
                 if (coreProcesses[cpu].process.currentLine == coreProcesses[cpu].process.totalLines) {
                     coreProcesses[cpu].flagCounter = 0;
+                    deallocateMemory(coreProcesses[cpu].process.pid);
                 }
             }
         }
@@ -295,7 +314,33 @@ void initializeProgram(const std::string& filename) {
 
     configFile.close();
     initialized = 1;
-    memoryBlocks.push_back({0, max_overall_mem - 1, true, -1});
+    int startAddr = 0;
+    for (int i = 0; i < 4; i++) {
+        //memoryBlocks.insert(memoryBlocks.begin(), {startAddr, startAddr + mem_per_proc - 1, true, -1}); // Inserts 1 at the front, but shifts all elements
+        memoryBlocks.push_back({startAddr, startAddr + mem_per_proc - 1, true, -1});
+        startAddr += mem_per_proc;
+    }
+
+    clearDirectory("./memStamps");
+
+}
+
+bool isMemFull () {
+    for (auto& block : memoryBlocks) {
+        if (block.isFree) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool procInMem (int pid) {
+    for (auto& block : memoryBlocks) {
+        if (block.pid == pid) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void RRScheduler() {
@@ -304,18 +349,49 @@ void RRScheduler() {
             // if process is not completed, add back to ready/waiting queue
             if (coreProcesses[i].process.processName != "" && coreProcesses[i].process.currentLine != coreProcesses[i].process.totalLines) {
                 scheduleQueue.push_back(coreProcesses[i].process);
-                deallocateMemory(coreProcesses[i].process.pid);
+          //      deallocateMemory(coreProcesses[i].process.pid);
             }
 
             // update assigned core on queues
+            ProcessScreen p;
             if (!scheduleQueue.empty()) {
-                coreProcesses[i].process = scheduleQueue.front();
-                coreProcesses[i].process.core = i;
-                processScreens[coreProcesses[i].process.processName].core = i;
-
-                if (allocateMemory(coreProcesses[i].process.pid, mem_per_proc)) {
-                    scheduleQueue.pop_front();
-                    coreProcesses[i].flagCounter = quantum_cycles;                    
+                if (isMemFull()) {
+                    if (procInMem(scheduleQueue.front().pid)) {
+                        coreProcesses[i].process = scheduleQueue.front();
+                        coreProcesses[i].process.core = i;
+                        processScreens[coreProcesses[i].process.processName].core = i;
+                        scheduleQueue.pop_front();
+                        coreProcesses[i].flagCounter = quantum_cycles;
+                    } else {
+                        p = scheduleQueue.front();
+                        scheduleQueue.pop_front();
+                        scheduleQueue.push_back(p);
+                    }
+                } else {
+                    if (procInMem(scheduleQueue.front().pid)) {
+                        coreProcesses[i].process = scheduleQueue.front();
+                        coreProcesses[i].process.core = i;
+                        processScreens[coreProcesses[i].process.processName].core = i;
+                        scheduleQueue.pop_front();
+                        coreProcesses[i].flagCounter = quantum_cycles;
+                    } else {
+                        allocateMemory(scheduleQueue.front().pid, mem_per_proc);
+                        coreProcesses[i].process = scheduleQueue.front();
+                        coreProcesses[i].process.core = i;
+                        processScreens[coreProcesses[i].process.processName].core = i;
+                        scheduleQueue.pop_front();
+                        coreProcesses[i].flagCounter = quantum_cycles;
+                    }
+                }
+                          
+            }
+        } else {
+            if (!isMemFull()) {
+                for (auto& process : scheduleQueue) {
+                    if (!procInMem(process.pid)) {
+                        allocateMemory(process.pid, mem_per_proc);
+                        break;
+                    }
                 }
             }
         }
@@ -335,6 +411,47 @@ void FCFSScheduler() {
     }
 }
 
+int getProcessesInMemory() {
+    int count = 0;
+    for (auto& block : memoryBlocks) {
+        if (!block.isFree) {
+            count++;
+        }
+    }
+    return count;
+}
+
+int getFragmentation() {
+    int frag = 0;
+    for (auto& block : memoryBlocks) {
+        if (block.isFree) {
+            frag += block.end - block.start + 1;
+        }
+    }
+    return frag;
+}
+
+void printMemStamp (int qq) {
+    char filename[100];
+    std::sprintf(filename, "./memStamps/memory_stamp_%d.txt", qq);
+    std::ofstream memFile(filename, std::ios::out);
+    memFile << "Timestamp: (" << getTimeStamp() << ")\n";
+    memFile << "Number of processes in memory: " << getProcessesInMemory() << "\n";
+    memFile << "Total external fragmentation in KB: " << getFragmentation() << "\n";
+    memFile << "\n----end---- = 16384\n\n";
+
+    for (int i = 3; i >= 0; i--) {
+        if (memoryBlocks[i].pid != -1) {
+            memFile << memoryBlocks[i].end << "\n";
+            memFile << "pid: " << memoryBlocks[i].pid << "\n";
+            memFile << memoryBlocks[i].start << "\n\n";
+        }
+    }
+
+    memFile << "\n----start---- = 0\n\n";
+    memFile.close();
+}
+
 void startClock() {
     for (int i = 0; i < num_cpu; i++) {
         thread t(core, i);
@@ -352,6 +469,8 @@ void startClock() {
         else {
             RRScheduler();
         }
+
+        printMemStamp(cpu_cycles);
 
         if (generating == true && batch_process_freq != 0 && cpu_cycles % batch_process_freq == 0) {
             string proposedName = "p" + to_string(pid);
