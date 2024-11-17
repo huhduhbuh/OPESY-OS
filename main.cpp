@@ -692,7 +692,7 @@ void mainMenu() {
                 }
                 mtx.unlock();
                 float utilization = (active_cores / (float)num_cpu) * 100;
-
+                printw("------------------------------------------- \n");
                 printw("PROCESS-SMI V01.00: \n");
                 printw("CPU Util: %3.2f%%\n", utilization);
                 printw("Memory Usage: %d MiB / %d MiB\n", mem_used, max_overall_mem);
@@ -701,6 +701,8 @@ void mainMenu() {
                 for (auto& p : running) {
                     printw("%s %d MiB\n", p.processName.c_str(), p.mem);
                 }
+                printw("------------------------------------------- \n");
+                printw("\n");
 
             } else if (input == "vmstat") {
 
