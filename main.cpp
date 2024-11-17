@@ -47,9 +47,12 @@ int max_ins = 0;
 int delay_per_exec = 0;
 int max_overall_mem = 0;
 int mem_per_frame = 0;
-int mem_per_proc = 0;
+int min_mem_per_proc = 0;
+int max_mem_per_proc = 0;
 int initialized = 0;
 int pid = 0;
+int min_exp;
+int max_exp;
 mutex mtx;
 
 // trim from the start (left)
@@ -77,6 +80,8 @@ struct ProcessScreen {
     int totalLines;
     string timeStamp;
     int core;
+    int mem;
+    int pages;
 };
 
 // struct for each core process 
@@ -89,58 +94,15 @@ struct CoreProcess {
 struct MemoryBlock {
     int start; // holds starting address of memory block
     int end; // holds ending address of memory block
-    bool isFree; // boolean to check if memory block is free or not
     int pid; // process id that is using the memory block
+    int mem; // how much mem is in memory block
+    int age;
 };
 
-vector<MemoryBlock> memoryBlocks; // vector to hold all memory blocks
+deque<MemoryBlock> freeMem; // vector to hold all free memory blocks
+deque<MemoryBlock> takenMem; // vector to hold all taken memory blocks
+bool flat = false;
 
-// function to allocate memory for a process
-bool allocateMemory(int pid, int memRequired) {
-    //memRequired = ceil(memRequired / (float)mem_per_frame) * mem_per_frame; // round up to nearest memory frame size
-
-    // for loop to check for free blocks of memory based on first fit 
-    for (auto& block : memoryBlocks) {
-        if (block.isFree && (block.end - block.start + 1) >= memRequired) {
-          //  int originalEnd = block.end; //debug
-           // block.end = block.start + memRequired - 1; //debug
-            block.isFree = false;
-            block.pid = pid;
-            
-            // splits block into portion of what process n will take up and the rest of the block
-           /* if ((block.end - block.start + 1) > memRequired) {
-                MemoryBlock newBlock = {block.start + memRequired, block.end, true, -1};
-                block.end = block.start + memRequired - 1;
-                memoryBlocks.insert(memoryBlocks.begin() + (&block - &memoryBlocks[0]) + 1, newBlock);
-            }*/
-
-            return true;
-        }
-    }
-    // returns false if no memory block is found
-    return false;
-}
-
-void deallocateMemory(int pid) {
-    // checks for all free blocks 
-    for (auto& block : memoryBlocks) {
-        if (block.pid == pid) {
-            block.isFree = true;
-            block.pid = -1;
-        }
-    }
-
-    // merges all the adjacent free blocks back into one block 
-    /*
-    for (auto i = memoryBlocks.begin(); i != memoryBlocks.end(); i++) {
-        if (i -> isFree && (i + 1) != memoryBlocks.end() && (i + 1) -> isFree) {
-            i -> end = (i + 1) -> end;
-            memoryBlocks.erase(i + 1);
-            i--;
-        }
-    }
-    */
-}
 
 // compare by pid
 bool compareByPID(pair<string, ProcessScreen> a, pair<string, ProcessScreen> b) {
@@ -167,6 +129,17 @@ void clearScreen() {
     clear();
     refresh();
 }
+
+ProcessScreen getProcByPid(int pid) {
+    for (auto& [key, screen] : processScreens) { 
+        if (screen.pid == pid) {
+            return screen;
+        }
+    }
+    ProcessScreen p;
+    return p; 
+}
+
 
 // for reprinting the header after clearing the screen
 void printHeader() {
@@ -252,7 +225,6 @@ void core(int cpu) {
                 // check if complete
                 if (coreProcesses[cpu].process.currentLine == coreProcesses[cpu].process.totalLines) {
                     coreProcesses[cpu].flagCounter = 0;
-                    deallocateMemory(coreProcesses[cpu].process.pid);
                 }
             }
         }
@@ -306,42 +278,126 @@ void initializeProgram(const std::string& filename) {
             else if (key == "mem-per-frame") {
                 iss >> mem_per_frame;
             }
-            else if (key == "mem-per-proc") {
-                iss >> mem_per_proc;
+            else if (key == "min-mem-per-proc") {
+                iss >> min_mem_per_proc;
+            } 
+            else if (key == "max-mem-per-proc") {
+                iss >> max_mem_per_proc;
             }
         }
     }
 
     configFile.close();
     initialized = 1;
-    int startAddr = 0;
-    for (int i = 0; i < 4; i++) {
-        //memoryBlocks.insert(memoryBlocks.begin(), {startAddr, startAddr + mem_per_proc - 1, true, -1}); // Inserts 1 at the front, but shifts all elements
-        memoryBlocks.push_back({startAddr, startAddr + mem_per_proc - 1, true, -1});
-        startAddr += mem_per_proc;
+    min_exp = log2(min_mem_per_proc);
+    max_exp = log2(max_mem_per_proc);
+    if (max_overall_mem == mem_per_frame) {
+        flat = true;
+        MemoryBlock m = {0, max_overall_mem-1, -1, max_overall_mem, 0};
+        freeMem.push_back(m);
+    } else {
+        flat = false;
     }
-
-    clearDirectory("./memStamps");
-
+    clearDirectory("./backing_store");
 }
 
-bool isMemFull () {
-    for (auto& block : memoryBlocks) {
-        if (block.isFree) {
-            return false;
+
+
+// add item to backing store
+ProcessScreen BSStore(int pid) {
+    ProcessScreen p;
+    return p;
+}
+
+// remove and return process in backing store
+ProcessScreen BSRetrieve(int pid) {
+    ProcessScreen p;
+    return p;
+}
+
+// merge blocks in freeMem
+void mergeAdjacentBlocks() {
+    if (freeMem.empty()) return;
+
+    std::deque<MemoryBlock> mergedBlocks;
+    mergedBlocks.push_back(freeMem[0]);
+
+    for (size_t i = 1; i < freeMem.size(); ++i) {
+        MemoryBlock& prev = mergedBlocks.back();
+        const MemoryBlock& current = freeMem[i];
+
+        if (prev.end + 1 == current.start) {
+            prev.end = current.end;
+        } else {
+            mergedBlocks.push_back(current);
         }
     }
-    return true;
+    freeMem = std::move(mergedBlocks);
 }
 
-bool procInMem (int pid) {
-    for (auto& block : memoryBlocks) {
-        if (block.pid == pid) {
+auto compByAddr = [] (MemoryBlock a, MemoryBlock b) {
+    return a.start < b.start;
+};
+
+// allocation algo for flat 
+// search free mem for space, if available, alloc and ret 1, else 0
+bool AllocateFlat(ProcessScreen p) {
+    for (long long unsigned int i = 0; i < freeMem.size(); i++) {
+        MemoryBlock m = freeMem[i];
+        if (m.mem >= p.mem) {
+            MemoryBlock newTakenBlock = {m.start, m.start+p.mem - 1, p.pid, p.mem, 0};
+            MemoryBlock leftoverBlock = {m.start+p.mem, m.end, -1, m.mem-p.mem, 0};
+            freeMem.erase(freeMem.begin() + i);
+            takenMem.push_back(newTakenBlock);
+            freeMem.push_back(leftoverBlock);
+            sort(freeMem.begin(), freeMem.end(), compByAddr);
+            mergeAdjacentBlocks();
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// return 1 if proc in main mem
+int FlatMemAlloc(ProcessScreen process) {
+    // check if proc in mem
+    for (const MemoryBlock& m : takenMem ) {
+        if (m.pid == process.pid) {
             return true;
         }
     }
-    return false;
+    /*// check if in backing store
+    ProcessScreen p = BSRetrieve(pid);
+    if (p.processName == "") {
+        // if not, gen new 
+        p = process;
+    }*/
+    ProcessScreen p = process;
+    // try allocating mem, if cant, swap out oldest
+    while(!AllocateFlat(p)){
+        // remove from takenMem
+        MemoryBlock m_oldest = takenMem.front();
+        takenMem.pop_front();
+        // add to freeMem
+        m_oldest.age = 0;
+        m_oldest.pid = -1;
+        freeMem.push_back(m_oldest);
+        sort(freeMem.begin(), freeMem.end(), compByAddr);
+        mergeAdjacentBlocks();
+        // remove from backing store
+        ProcessScreen p_oldest = getProcByPid(pid);
+        BSStore(p_oldest.pid);
+    }
+
+    return 0;
+
 }
+
+// return 1 if all pages are in main mem
+int PagingAlloc() {
+    return 0;
+}
+
 
 void RRScheduler() {
     for (int i = 0; i < num_cpu; i++) {
@@ -353,104 +409,39 @@ void RRScheduler() {
             }
 
             // update assigned core on queues
-            ProcessScreen p;
             if (!scheduleQueue.empty()) {
-                if (isMemFull()) {
-                    if (procInMem(scheduleQueue.front().pid)) {
-                        coreProcesses[i].process = scheduleQueue.front();
-                        coreProcesses[i].process.core = i;
-                        processScreens[coreProcesses[i].process.processName].core = i;
-                        scheduleQueue.pop_front();
-                        coreProcesses[i].flagCounter = quantum_cycles;
-                    } else {
-                        p = scheduleQueue.front();
-                        scheduleQueue.pop_front();
-                        scheduleQueue.push_back(p);
-                    }
+                ProcessScreen p = scheduleQueue.front();
+                scheduleQueue.pop_front();
+                if ((flat == 1 && FlatMemAlloc(p)) || (flat == 0 && PagingAlloc())) {
+                    coreProcesses[i].process = p;
+                    coreProcesses[i].process.core = i;
+                    processScreens[coreProcesses[i].process.processName].core = i;
+                    coreProcesses[i].flagCounter = quantum_cycles;      
                 } else {
-                    if (procInMem(scheduleQueue.front().pid)) {
-                        coreProcesses[i].process = scheduleQueue.front();
-                        coreProcesses[i].process.core = i;
-                        processScreens[coreProcesses[i].process.processName].core = i;
-                        scheduleQueue.pop_front();
-                        coreProcesses[i].flagCounter = quantum_cycles;
-                    } else {
-                        allocateMemory(scheduleQueue.front().pid, mem_per_proc);
-                        coreProcesses[i].process = scheduleQueue.front();
-                        coreProcesses[i].process.core = i;
-                        processScreens[coreProcesses[i].process.processName].core = i;
-                        scheduleQueue.pop_front();
-                        coreProcesses[i].flagCounter = quantum_cycles;
-                    }
-                }
-                          
-            }
-        } else {
-            if (!isMemFull()) {
-                for (auto& process : scheduleQueue) {
-                    if (!procInMem(process.pid)) {
-                        allocateMemory(process.pid, mem_per_proc);
-                        break;
-                    }
+                    scheduleQueue.push_back(p);
                 }
             }
-        }
+        } 
     }
 }
 
 void FCFSScheduler() {
     for (int i = 0; i < num_cpu; i++) {
         if (coreProcesses[i].flagCounter == 0 && !scheduleQueue.empty()) {
-            coreProcesses[i].process = scheduleQueue.front();
-            // update assigned core on queues
-            coreProcesses[i].process.core = i;
-            processScreens[coreProcesses[i].process.processName].core = i;
+            ProcessScreen p = scheduleQueue.front();
             scheduleQueue.pop_front();
-            coreProcesses[i].flagCounter = quantum_cycles;
+            if ((flat == 1 && FlatMemAlloc(p)) || (flat == 0 && PagingAlloc())) {
+                coreProcesses[i].process = p;
+                coreProcesses[i].process.core = i;
+                processScreens[coreProcesses[i].process.processName].core = i;
+                coreProcesses[i].flagCounter = quantum_cycles;      
+            } else {
+                scheduleQueue.push_back(p);
+            }
         }
     }
 }
 
-int getProcessesInMemory() {
-    int count = 0;
-    for (auto& block : memoryBlocks) {
-        if (!block.isFree) {
-            count++;
-        }
-    }
-    return count;
-}
-
-int getFragmentation() {
-    int frag = 0;
-    for (auto& block : memoryBlocks) {
-        if (block.isFree) {
-            frag += block.end - block.start + 1;
-        }
-    }
-    return frag;
-}
-
-void printMemStamp (int qq) {
-    char filename[100];
-    std::sprintf(filename, "./memStamps/memory_stamp_%d.txt", qq);
-    std::ofstream memFile(filename, std::ios::out);
-    memFile << "Timestamp: (" << getTimeStamp() << ")\n";
-    memFile << "Number of processes in memory: " << getProcessesInMemory() << "\n";
-    memFile << "Total external fragmentation in KB: " << getFragmentation() << "\n";
-    memFile << "\n----end---- = 16384\n\n";
-
-    for (int i = 3; i >= 0; i--) {
-        if (memoryBlocks[i].pid != -1) {
-            memFile << memoryBlocks[i].end << "\n";
-            memFile << "pid: " << memoryBlocks[i].pid << "\n";
-            memFile << memoryBlocks[i].start << "\n\n";
-        }
-    }
-
-    memFile << "\n----start---- = 0\n\n";
-    memFile.close();
-}
 
 void startClock() {
     for (int i = 0; i < num_cpu; i++) {
@@ -470,8 +461,6 @@ void startClock() {
             RRScheduler();
         }
 
-        printMemStamp(cpu_cycles);
-
         if (generating == true && batch_process_freq != 0 && cpu_cycles % batch_process_freq == 0) {
             string proposedName = "p" + to_string(pid);
             // in case user uses screen -s with the same name
@@ -479,7 +468,8 @@ void startClock() {
                 pid++;
                 proposedName = "p" + to_string(pid);
             }
-            ProcessScreen newScreen = { pid, proposedName, 0, rand() % (max_ins - min_ins + 1) + min_ins, getTimeStamp(), -1 };
+            int M = pow(2, rand() % (max_exp - min_exp + 1) + min_exp);
+            ProcessScreen newScreen = { pid, proposedName, 0, rand() % (max_ins - min_ins + 1) + min_ins, getTimeStamp(), -1, M, M/mem_per_frame};
             pid++;
             processScreens[proposedName] = newScreen;
             scheduleQueue.push_back(newScreen);
@@ -487,7 +477,6 @@ void startClock() {
         napms(100); // sleep, milliseconds
     }
 }
-
 
 void mainMenu() {
     printHeader();
@@ -527,7 +516,8 @@ void mainMenu() {
                 if (processName == "") {
                     printw("Can't have a blank process name.\n");
                 } else if (processScreens.find(processName) == processScreens.end()) {
-                    ProcessScreen newScreen = { pid, processName, 0, rand() % (max_ins - min_ins + 1) + min_ins, getTimeStamp(), -1 };
+                    int M = pow(2, rand() % (max_exp - min_exp + 1) + min_exp);
+                    ProcessScreen newScreen = { pid, processName, 0, rand() % (max_ins - min_ins + 1) + min_ins, getTimeStamp(), -1, M, M/mem_per_frame };
                     pid++;
                     processScreens[processName] = newScreen;
                     scheduleQueue.push_back(newScreen);

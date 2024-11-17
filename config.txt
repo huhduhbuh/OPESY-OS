@@ -4,6 +4,7 @@ quantum-cycles 4
 batch-process-freq 1
 min-ins 100
 max-ins 100
-max-overall-mem 16384
-mem-per-frame 16
-mem-per-proc 4096
+max-overall-mem 128
+mem-per-frame 128
+min-mem-per-proc 4
+min-mem-per-proc 32
