@@ -53,6 +53,9 @@ int initialized = 0;
 int pid = 0;
 int min_exp;
 int max_exp;
+int active_cpu_ticks = 0;
+int num_paged_in = 0;
+int num_paged_out = 0;
 mutex mtx;
 
 // trim from the start (left)
@@ -214,12 +217,13 @@ void core(int cpu) {
 
             if (coreProcesses[cpu].flagCounter > 0) {
                 // update both scheduleQueue and processScreens
-                coreProcesses[cpu].process.currentLine += quantum_cycles;
-                processScreens[coreProcesses[cpu].process.processName].currentLine += quantum_cycles;
+                coreProcesses[cpu].process.currentLine += quantum_cycles; // change to ++ if need slow
+                processScreens[coreProcesses[cpu].process.processName].currentLine += quantum_cycles; // change to ++ if need slow
+                active_cpu_ticks++;
 
                 // only proper executions will count towards quantum slice counter
                 if (scheduler == "rr") {
-                    coreProcesses[cpu].flagCounter = 0;
+                    coreProcesses[cpu].flagCounter = 0; // change to -- if need slow
                 }
 
                 // check if complete
@@ -473,7 +477,7 @@ void startClock() {
             processScreens[proposedName] = newScreen;
             scheduleQueue.push_back(newScreen);
         }
-        napms(100); // sleep, milliseconds
+        napms(10); // sleep, milliseconds
     }
 }
 
@@ -705,6 +709,26 @@ void mainMenu() {
                 printw("\n");
 
             } else if (input == "vmstat") {
+                int mem_used = 0;
+                vector<ProcessScreen> running; 
+                mtx.lock();
+                 for (int i = 0; i < num_cpu; i++) {
+                    if (coreProcesses[i].flagCounter > 0) {
+                        running.push_back(coreProcesses[i].process);
+                        mem_used += coreProcesses[i].process.mem;
+                    }
+                }
+                mtx.unlock();
+                printw("------------------------------------------- \n");
+                printw("Total memory: %d\n", max_overall_mem);
+                printw("Used memory: %d\n", mem_used);
+                printw("Free memory: %d\n", max_overall_mem - mem_used); // idk if free mem includes mem blocks that are in memory but are just from prev processes that arent in use anymore
+                printw("Idle cpu ticks: %d\n", cpu_cycles-active_cpu_ticks);
+                printw("Active cpu ticks: %d\n", active_cpu_ticks);
+                printw("Total cpu ticks: %d\n", cpu_cycles);
+                printw("Num paged in: %d\n", num_paged_in);
+                printw("Num paged out: %d\n", num_paged_out);
+                printw("------------------------------------------- \n");
 
             }
             else if (input == "exit") {
