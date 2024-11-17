@@ -389,8 +389,7 @@ int FlatMemAlloc(ProcessScreen process) {
         BSStore(p_oldest.pid);
     }
 
-    return 0;
-
+    return true;
 }
 
 // return 1 if all pages are in main mem
@@ -678,6 +677,33 @@ void mainMenu() {
             else if (input == "clear") {
                 clearScreen();
                 printHeader();
+            }
+            else if (input == "process-smi") {
+                int active_cores = 0;
+                int mem_used = 0;
+                vector<ProcessScreen> running; 
+                mtx.lock();
+                 for (int i = 0; i < num_cpu; i++) {
+                    if (coreProcesses[i].flagCounter > 0) {
+                        active_cores++;
+                        running.push_back(coreProcesses[i].process);
+                        mem_used += coreProcesses[i].process.mem;
+                    }
+                }
+                mtx.unlock();
+                float utilization = (active_cores / (float)num_cpu) * 100;
+
+                printw("PROCESS-SMI V01.00: \n");
+                printw("CPU Util: %3.2f%%\n", utilization);
+                printw("Memory Usage: %d MiB / %d MiB\n", mem_used, max_overall_mem);
+                printw("Memory Util: %3.2f%%\n\n", mem_used / (float) max_overall_mem * 100);
+                printw("Running processes and memory usage: \n");
+                for (auto& p : running) {
+                    printw("%s %d MiB\n", p.processName.c_str(), p.mem);
+                }
+
+            } else if (input == "vmstat") {
+
             }
             else if (input == "exit") {
                 run = false;
