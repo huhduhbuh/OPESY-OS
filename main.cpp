@@ -227,7 +227,6 @@ void core(int cpu) {
                 // update both scheduleQueue and processScreens
                 coreProcesses[cpu].process.currentLine += quantum_cycles; // change to ++ if need slow
                 processScreens[coreProcesses[cpu].process.processName].currentLine += quantum_cycles; // change to ++ if need slow
-                active_cpu_ticks++;
 
                 // only proper executions will count towards quantum slice counter
                 if (scheduler == "rr") {
@@ -240,7 +239,7 @@ void core(int cpu) {
                 }
             }
         }
-        // napms(1);
+        napms(1);
     }
 }
 
@@ -323,12 +322,35 @@ void initializeProgram(const std::string& filename) {
 
 // add item to backing store
 void BSStore(int pid) {
-
+    string filepath = "backing_store/" + to_string(pid) + ".txt";
+    std::ofstream file(filepath, std::ios::app);
+    file << pid << '\n';
+    file.close();
 }
 
-// remove and return process in backing store
+// remove item from backing store if exists
 void BSRetrieve(int pid) {
+    string filepath = "backing_store/" + to_string(pid) + ".txt";
 
+    // read contents
+    ifstream file(filepath, ios::in);
+    if (!file.is_open()) return;
+    string line;
+    vector<string> lines;
+    while (getline(file, line)) {
+        lines.push_back(line);
+    }
+    file.close();
+
+    // remove last line
+    if (!lines.empty()) lines.pop_back();
+
+    // write updated contents
+    ofstream fileWrite(filepath, ios::out);
+    for (auto& l : lines) {
+        fileWrite << l << '\n';
+    }
+    fileWrite.close();
 }
 
 // merge blocks in freeMem
@@ -461,12 +483,12 @@ int PagingAlloc(ProcessScreen process) {
 
 
 void RRScheduler() {
+    int active = 0;
     for (int i = 0; i < num_cpu; i++) {
         if (coreProcesses[i].flagCounter == 0) {
             // if process is not completed, add back to ready/waiting queue
             if (coreProcesses[i].process.processName != "" && coreProcesses[i].process.currentLine != coreProcesses[i].process.totalLines) {
                 scheduleQueue.push_back(coreProcesses[i].process);
-          //      deallocateMemory(coreProcesses[i].process.pid);
             }
 
             // update assigned core on queues
@@ -482,11 +504,15 @@ void RRScheduler() {
                     scheduleQueue.push_back(p);
                 }
             }
-        } 
+        } else {
+            active = 1;
+        }
     }
+    if (active) active_cpu_ticks++;
 }
 
 void FCFSScheduler() {
+    int active = 0;
     for (int i = 0; i < num_cpu; i++) {
         if (coreProcesses[i].flagCounter == 0 && !scheduleQueue.empty()) {
             ProcessScreen p = scheduleQueue.front();
@@ -499,8 +525,11 @@ void FCFSScheduler() {
             } else {
                 scheduleQueue.push_back(p);
             }
+        } else if (coreProcesses[i].flagCounter != 0) {
+            active = 1;
         }
     }
+    if (active) active_cpu_ticks++;
 }
 
 
@@ -515,6 +544,11 @@ void startClock() {
 
     while (true) {
         cpu_cycles++;
+        if (flat == 0) {
+            for (auto& [key, value] : frameMap) { 
+                if (value.pid != -1) value.age++;
+            }
+        }
         if (scheduler == "fcfs") {
             FCFSScheduler();
         }
