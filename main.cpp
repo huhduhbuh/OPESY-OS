@@ -56,6 +56,7 @@ int max_exp;
 int active_cpu_ticks = 0;
 int num_paged_in = 0;
 int num_paged_out = 0;
+int total_frames = 0;
 mutex mtx;
 
 // trim from the start (left)
@@ -102,6 +103,13 @@ struct MemoryBlock {
     int age;
 };
 
+struct PIDAge {
+    int pid;
+    int age;
+};
+
+map<int, PIDAge> frameMap;
+deque<int> freeFrameList;
 deque<MemoryBlock> freeMem; // vector to hold all free memory blocks
 deque<MemoryBlock> takenMem; // vector to hold all taken memory blocks
 bool flat = false;
@@ -232,6 +240,7 @@ void core(int cpu) {
                 }
             }
         }
+        // napms(1);
     }
 }
 
@@ -301,6 +310,11 @@ void initializeProgram(const std::string& filename) {
         freeMem.push_back(m);
     } else {
         flat = false;
+        total_frames = max_overall_mem / mem_per_frame;
+        for (int i = 0; i < total_frames; i++) {
+            freeFrameList.push_back(i);
+            frameMap[i] = {-1, 0};
+        }
     }
     clearDirectory("./backing_store");
 }
@@ -308,15 +322,13 @@ void initializeProgram(const std::string& filename) {
 
 
 // add item to backing store
-ProcessScreen BSStore(int pid) {
-    ProcessScreen p;
-    return p;
+void BSStore(int pid) {
+
 }
 
 // remove and return process in backing store
-ProcessScreen BSRetrieve(int pid) {
-    ProcessScreen p;
-    return p;
+void BSRetrieve(int pid) {
+
 }
 
 // merge blocks in freeMem
@@ -370,24 +382,23 @@ int FlatMemAlloc(ProcessScreen process) {
             return true;
         }
     }
-    /*// check if in backing store
-    ProcessScreen p = BSRetrieve(pid);
-    if (p.processName == "") {
-        // if not, gen new 
-        p = process;
-    }*/
-    ProcessScreen p = process;
+    // remove from backing store if exists
+    BSRetrieve(process.pid);
+
     // try allocating mem, if cant, swap out oldest
+    ProcessScreen p = process;
     while(!AllocateFlat(p)){
         // remove from takenMem
         MemoryBlock m_oldest = takenMem.front();
         takenMem.pop_front();
+
         // add to freeMem
         m_oldest.age = 0;
         m_oldest.pid = -1;
         freeMem.push_back(m_oldest);
         sort(freeMem.begin(), freeMem.end(), compByAddr);
         mergeAdjacentBlocks();
+
         // remove from backing store
         ProcessScreen p_oldest = getProcByPid(pid);
         BSStore(p_oldest.pid);
@@ -396,9 +407,56 @@ int FlatMemAlloc(ProcessScreen process) {
     return true;
 }
 
-// return 1 if all pages are in main mem
-int PagingAlloc() {
+bool AllocatePage(ProcessScreen p){
+    // look for free space
+    for (auto& [key, value] : frameMap) { 
+        if (value.pid == -1) {
+            frameMap[key].pid = p.pid;
+            frameMap[key].age = 0;
+            num_paged_in++;
+            return 1;
+        }
+    }
     return 0;
+}
+
+// return 1 if all pages are in main mem
+int PagingAlloc(ProcessScreen process) {
+    // check if proc in mem
+    int associatedFrames = 0;
+    for (auto& [key, value] : frameMap) { 
+        if (process.pid == value.pid) {
+            associatedFrames++;
+        }
+    }
+    if (associatedFrames == process.pages) return true;
+
+    // try allocate the rest of the needed pages
+    while (associatedFrames != process.pages) {
+
+        // remove from backing store if exists
+        BSRetrieve(process.pid);
+
+        // try allocating page, if cant, swap out oldest
+        while (!AllocatePage(process)) {
+            // find oldest and remove
+            int oldestKey = 0;
+            int oldestAge = -1;
+            for (auto& [key, value] : frameMap) { 
+                if (oldestAge < value.age) {
+                    oldestAge = value.age;
+                    oldestKey = key;
+                }
+            }
+            BSStore(frameMap[oldestKey].pid);
+            frameMap[oldestKey].age = 0;
+            frameMap[oldestKey].pid = -1;
+            num_paged_out++;
+        }
+        associatedFrames++;
+    }
+
+    return true;
 }
 
 
@@ -415,7 +473,7 @@ void RRScheduler() {
             if (!scheduleQueue.empty()) {
                 ProcessScreen p = scheduleQueue.front();
                 scheduleQueue.pop_front();
-                if ((flat == 1 && FlatMemAlloc(p)) || (flat == 0 && PagingAlloc())) {
+                if ((flat == 1 && FlatMemAlloc(p)) || (flat == 0 && PagingAlloc(p))) {
                     coreProcesses[i].process = p;
                     coreProcesses[i].process.core = i;
                     processScreens[coreProcesses[i].process.processName].core = i;
@@ -433,7 +491,7 @@ void FCFSScheduler() {
         if (coreProcesses[i].flagCounter == 0 && !scheduleQueue.empty()) {
             ProcessScreen p = scheduleQueue.front();
             scheduleQueue.pop_front();
-            if ((flat == 1 && FlatMemAlloc(p)) || (flat == 0 && PagingAlloc())) {
+            if ((flat == 1 && FlatMemAlloc(p)) || (flat == 0 && PagingAlloc(p))) {
                 coreProcesses[i].process = p;
                 coreProcesses[i].process.core = i;
                 processScreens[coreProcesses[i].process.processName].core = i;
