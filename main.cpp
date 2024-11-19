@@ -235,6 +235,7 @@ void mergeAdjacentBlocks() {
 
         if (prev.end + 1 == current.start) {
             prev.end = current.end;
+            prev.mem += current.mem;
         } else {
             mergedBlocks.push_back(current);
         }
@@ -244,6 +245,7 @@ void mergeAdjacentBlocks() {
 
 
 void FlatDealloc(int pid) {
+    mtx.lock();
     for (long long unsigned int i = 0; i < takenMem.size(); i++) {
         MemoryBlock m = takenMem[i];
         if (m.pid == pid) {
@@ -255,6 +257,7 @@ void FlatDealloc(int pid) {
             break;
         }
     }
+    mtx.unlock();
     // remove from backing store
     string filepath = "backing_store/" + to_string(pid) + ".txt";
     std::ofstream file(filepath, std::ios::out);
@@ -263,6 +266,7 @@ void FlatDealloc(int pid) {
 
 void PageDealloc(int pid) {
     // dealloc all pages from frame map
+    mtx.lock();
     for (auto& [key, value] : frameMap) { 
         if (pid == value.pid) {
             value.active = 0;
@@ -270,6 +274,7 @@ void PageDealloc(int pid) {
             value.pid = -1;
         }
     }
+    mtx.unlock();
     // remove from backing store
     string filepath = "backing_store/" + to_string(pid) + ".txt";
     std::ofstream file(filepath, std::ios::out);
@@ -279,6 +284,7 @@ void PageDealloc(int pid) {
 
 // add item to backing store
 void BSStore(int pid) {
+    if (pid == -1) return;
     string filepath = "backing_store/" + to_string(pid) + ".txt";
     std::ofstream file(filepath, std::ios::app);
     file << pid << '\n';
@@ -287,6 +293,7 @@ void BSStore(int pid) {
 
 // remove item from backing store if exists
 void BSRetrieve(int pid) {
+    if (pid == -1) return;
     string filepath = "backing_store/" + to_string(pid) + ".txt";
 
     // read contents
@@ -335,6 +342,7 @@ void core(int cpu) {
                 // only proper executions will count towards quantum slice counter
                 if (scheduler == "rr") {
                     if (flat == 1) {
+                        mtx.lock();
                         for (long long unsigned int i = 0; i < takenMem.size(); i++) {
                             MemoryBlock m = takenMem[i];
                             if (m.pid == coreProcesses[cpu].process.pid) {
@@ -347,12 +355,17 @@ void core(int cpu) {
                                 break;
                             }
                         }
+                        mtx.unlock();
                     } else {
+                        mtx.lock();
                         for (auto& [key, value] : frameMap) { 
                             if (coreProcesses[cpu].process.pid == value.pid) {
                                 frameMap[key].active = 0;
+                                frameMap[key].pid = -1;
+                                frameMap[key].age = 0;
                             }
                         }
+                        mtx.unlock();
                     }
                     coreProcesses[cpu].flagCounter = 0; // change to -- if need slow
                 }
@@ -442,6 +455,7 @@ void initializeProgram(const std::string& filename) {
 // allocation algo for flat 
 // search free mem for space, if available, alloc and ret 1, else 0
 bool AllocateFlat(ProcessScreen p) {
+    mtx.lock();
     for (long long unsigned int i = 0; i < freeMem.size(); i++) {
         MemoryBlock m = freeMem[i];
         if (m.mem >= p.mem) {
@@ -449,12 +463,16 @@ bool AllocateFlat(ProcessScreen p) {
             MemoryBlock leftoverBlock = {m.start+p.mem, m.end, -1, m.mem-p.mem, 0, 0};
             freeMem.erase(freeMem.begin() + i);
             takenMem.push_back(newTakenBlock);
-            freeMem.push_back(leftoverBlock);
-            sort(freeMem.begin(), freeMem.end(), compByAddr);
-            mergeAdjacentBlocks();
+            if (m.start+p.mem < m.end) {
+                freeMem.push_back(leftoverBlock);
+                sort(freeMem.begin(), freeMem.end(), compByAddr);
+                mergeAdjacentBlocks();
+            }
+            mtx.unlock();
             return 1;
         }
     }
+    mtx.unlock();
     return 0;
 }
 
@@ -469,25 +487,26 @@ int FlatMemAlloc(ProcessScreen process) {
         MemoryBlock m_oldest;
 
         // remove oldest inactive from takenMem
+        mtx.lock();
         long long unsigned int i;
         for (i = 0; i < takenMem.size(); i++) {
             if (takenMem[i].active == 0) {
+                BSStore(takenMem[i].pid);
                 m_oldest = {takenMem[i].start, takenMem[i].end, -1,  takenMem[i].mem, 0, 0};
                 takenMem.erase(takenMem.begin()+i);
                 break;
             }
         }
+        mtx.unlock();
         // return if cant find any available space 
         if (i == takenMem.size()) return 0;
 
         // add to freeMem
+        mtx.lock();
         freeMem.push_back(m_oldest);
         sort(freeMem.begin(), freeMem.end(), compByAddr);
         mergeAdjacentBlocks();
-
-        // remove from backing store
-        ProcessScreen p_oldest = getProcByPid(pid);
-        BSStore(p_oldest.pid);
+        mtx.unlock();
     }
 
     return true;
@@ -499,7 +518,6 @@ bool AllocatePage(ProcessScreen p){
         if (value.pid == -1 && value.active == 0) {
             frameMap[key].pid = p.pid;
             frameMap[key].age = 0;
-            frameMap[key].active = 1;
             num_paged_in++;
             return 1;
         }
@@ -510,14 +528,22 @@ bool AllocatePage(ProcessScreen p){
 // return 1 if all pages are in main mem
 int PagingAlloc(ProcessScreen process) {
     // check if proc in mem
+    mtx.lock();
     int associatedFrames = 0;
     for (auto& [key, value] : frameMap) { 
         if (process.pid == value.pid) {
             associatedFrames++;
-            value.active = 1;
         }
     }
-    if (associatedFrames == process.pages) return true;
+    if (associatedFrames == process.pages) {
+        for (auto& [key, value] : frameMap) { 
+            if (process.pid == value.pid) {
+                frameMap[key].active = 1;
+            }
+        }
+        mtx.unlock();
+        return true;
+    }
 
     // try allocate the rest of the needed pages
     while (associatedFrames != process.pages) {
@@ -531,14 +557,16 @@ int PagingAlloc(ProcessScreen process) {
             int oldestKey = 0;
             int oldestAge = -1;
             for (auto& [key, value] : frameMap) { 
-                if (oldestAge < value.age && value.active == 0) {
+                if (oldestAge < value.age && value.active == 0 && value.pid != process.pid) {
                     oldestAge = value.age;
                     oldestKey = key;
                 } 
             }
             // return if cant find any available space 
-            if (oldestAge == -1) return 0;
-
+            if (oldestAge == -1) {
+                mtx.unlock();
+                return 0;
+            }
             BSStore(frameMap[oldestKey].pid);
             frameMap[oldestKey].age = 0;
             frameMap[oldestKey].pid = -1;
@@ -547,7 +575,12 @@ int PagingAlloc(ProcessScreen process) {
         }
         associatedFrames++;
     }
-
+    for (auto& [key, value] : frameMap) { 
+        if (process.pid == value.pid) {
+            frameMap[key].active = 1;
+        }
+    }
+    mtx.unlock();
     return true;
 }
 
@@ -588,6 +621,15 @@ void RRScheduler() {
 }
 
 void FCFSScheduler() {
+    /*
+    mtx.lock();
+    printw("\n");
+    for (auto& [key, value] : frameMap) printw("-%d %d %d %d %d-\n", key, value.pid, value.age, value.active, getProcByPid(value.pid).mem);
+    printw("=====\n");
+    for (auto& cp : coreProcesses) printw("%d %d %d\n", cp.process.pid, cp.process.mem, cp.process.pages);
+    printw("\n");
+    mtx.unlock();
+    */
     int active = 0;
     for (int i = 0; i < num_cpu; i++) {
         if (coreProcesses[i].flagCounter == 0 && !scheduleQueue.empty()) {
@@ -758,7 +800,7 @@ void mainMenu() {
                 sort(sortedMap.begin(), sortedMap.end(), compareByPID);
                 for (auto& it : sortedMap) {
                     p = it.second;
-                    if (p.currentLine == p.totalLines) {
+                    if (p.currentLine >= p.totalLines) {
                         formatTime = p.timeStamp;
                         formatTime.erase(10, 1);
                         printw("%s\t(%s)\tCore: %d\t\t%d / %d\n", p.processName.c_str(), formatTime.c_str(), p.core, p.totalLines, p.totalLines);
@@ -834,7 +876,7 @@ void mainMenu() {
                 sort(sortedMap.begin(), sortedMap.end(), compareByPID);
                 for (auto& it : sortedMap) {
                     p = it.second;
-                    if (p.currentLine == p.totalLines) {
+                    if (p.currentLine >= p.totalLines) {
                         formatTime = p.timeStamp;
                         formatTime.erase(10, 1);
                         logFile << p.processName << "\t(" << p.timeStamp << ")\tCore: " << p.core
