@@ -424,14 +424,14 @@ void initializeProgram(const std::string& filename) {
     max_exp = log2(max_mem_per_proc);
     if (max_overall_mem == mem_per_frame) {
         flat = true;
-        MemoryBlock m = {0, max_overall_mem-1, -1, max_overall_mem, 0};
+        MemoryBlock m = {0, max_overall_mem-1, -1, max_overall_mem, 0, 0};
         freeMem.push_back(m);
     } else {
         flat = false;
         total_frames = max_overall_mem / mem_per_frame;
         for (int i = 0; i < total_frames; i++) {
             freeFrameList.push_back(i);
-            frameMap[i] = {-1, 0};
+            frameMap[i] = {-1, 0, 0};
         }
     }
     clearDirectory("./backing_store");
@@ -472,7 +472,7 @@ int FlatMemAlloc(ProcessScreen process) {
         long long unsigned int i;
         for (i = 0; i < takenMem.size(); i++) {
             if (takenMem[i].active == 0) {
-                m_oldest = {takenMem[i].start, takenMem[i].end, 0, -1, 0};
+                m_oldest = {takenMem[i].start, takenMem[i].end, -1,  takenMem[i].mem, 0, 0};
                 takenMem.erase(takenMem.begin()+i);
                 break;
             }
@@ -742,7 +742,7 @@ void mainMenu() {
 
                 printw("\nRunning processes: \n");
                 for (int i = 0; i < num_cpu; i++) {
-                    if (coreProcesses[i].flagCounter > 0 && coreProcesses[i].process.processName != "" && coreProcesses[i].process.currentLine != coreProcesses[i].process.totalLines) {
+                    if (coreProcesses[i].flagCounter > 0 && coreProcesses[i].process.processName != "" && coreProcesses[i].process.currentLine < coreProcesses[i].process.totalLines) {
                         p = coreProcesses[i].process;
                         formatTime = p.timeStamp;
                         formatTime.erase(10, 1);
@@ -761,7 +761,7 @@ void mainMenu() {
                     if (p.currentLine == p.totalLines) {
                         formatTime = p.timeStamp;
                         formatTime.erase(10, 1);
-                        printw("%s\t(%s)\tCore: %d\t\t%d / %d\n", p.processName.c_str(), formatTime.c_str(), p.core, p.currentLine, p.totalLines);
+                        printw("%s\t(%s)\tCore: %d\t\t%d / %d\n", p.processName.c_str(), formatTime.c_str(), p.core, p.totalLines, p.totalLines);
                     }
                 }
 
@@ -816,7 +816,7 @@ void mainMenu() {
 
                 logFile << "Running processes: \n";
                 for (int i = 0; i < num_cpu; i++) {
-                    if (coreProcesses[i].flagCounter > 0 && coreProcesses[i].process.processName != "" && coreProcesses[i].process.currentLine != coreProcesses[i].process.totalLines) {
+                    if (coreProcesses[i].flagCounter > 0 && coreProcesses[i].process.processName != "" && coreProcesses[i].process.currentLine < coreProcesses[i].process.totalLines) {
                         p = coreProcesses[i].process;
                         formatTime = p.timeStamp;
                         formatTime.erase(10, 1);
@@ -838,7 +838,7 @@ void mainMenu() {
                         formatTime = p.timeStamp;
                         formatTime.erase(10, 1);
                         logFile << p.processName << "\t(" << p.timeStamp << ")\tCore: " << p.core
-                            << "\t\t" << p.currentLine << " / " << p.totalLines << "\n";
+                            << "\t\t" << p.totalLines << " / " << p.totalLines << "\n";
                     }
                 }
 
